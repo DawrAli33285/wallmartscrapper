@@ -41,7 +41,7 @@ async function fetchWalmartProduct(itemId) {
         url: url,
         headers: {
             'x-rapidapi-host': 'realtime-walmart-data.p.rapidapi.com',
-            'x-rapidapi-key': '9a3a6843f7msh84cbc72b6ffe3b6p13b266jsn3c18f2f49119'
+            'x-rapidapi-key': 'efc5651cbcmshe26912fd81c7795p13e7afjsn07f94d690435'
         }
     };
     
@@ -66,7 +66,7 @@ async function fetchSellerDetails(catalogSellerId) {
         url: url,
         headers: {
             'x-rapidapi-host': 'realtime-walmart-data.p.rapidapi.com',
-            'x-rapidapi-key': '9a3a6843f7msh84cbc72b6ffe3b6p13b266jsn3c18f2f49119'
+            'x-rapidapi-key': 'efc5651cbcmshe26912fd81c7795p13e7afjsn07f94d690435'
         }
     };
     
