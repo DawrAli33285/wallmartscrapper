@@ -1,6 +1,6 @@
 const mongoose=require('mongoose')
 
 
-let connect=mongoose.connect('mongodb://127.0.0.1/wallmartscrapper')
+let connect=mongoose.connect('mongodb+srv://dawar:dawar@cluster0.rdpbsle.mongodb.net')
 
 module.exports=connect; 
