@@ -240,11 +240,11 @@ module.exports.enrichifyFile = async (req, res) => {
         
         // Create enriched CSV file
         const outputFileName = `enriched-${Date.now()}.csv`;
-        outputFilePath = `./uploads/${outputFileName}`;
+        outputFilePath = `/tmp/public/files/uploads/${outputFileName}`;
         
         // Ensure uploads directory exists
-        if (!fs.existsSync('./uploads')) {
-            fs.mkdirSync('./uploads', { recursive: true });
+        if (!fs.existsSync('/tmp/public/files/uploads')) {
+            fs.mkdirSync('/tmp/public/files/uploads', { recursive: true });
         }
         
         // Get all unique headers
