@@ -213,12 +213,11 @@ module.exports.enrichifyFile = async (req, res) => {
                 ...record,
                 enrichment_status: 'success',
                 extracted_product_id: productId,
-                product_name: productData.name || '',
-                product_price: productData.price || '',
-                product_currency: productData.currency || '',
+              
+                
                 product_rating: productData.rating || '',
-                product_reviews_count: productData.reviewsCount || '',
-                product_availability: productData.availability || '',
+              
+               
                 product_brand: productData.brand || '',
                 product_category: productData.category || '',
                 product_description: productData.description || '',
@@ -234,8 +233,8 @@ module.exports.enrichifyFile = async (req, res) => {
                 seller_country: sellerData?.seller_address?.country || '',
                 seller_postal_code: sellerData?.seller_address?.postalCode || '',
                 
-                seller_feedback_count: sellerData?.feedbackCount || '',
-                seller_positive_feedback_percent: sellerData?.positiveFeedbackPercent || '',
+               
+               
                 enriched_at: new Date().toISOString()
             };
             
