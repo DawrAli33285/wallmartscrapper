@@ -41,7 +41,7 @@ async function fetchWalmartProduct(itemId) {
         url: url,
         headers: {
             'x-rapidapi-host': 'realtime-walmart-data.p.rapidapi.com',
-            'x-rapidapi-key': 'efc5651cbcmshe26912fd81c7795p13e7afjsn07f94d690435'
+            'x-rapidapi-key': 'b9f300ae50msh337f637e3b499b7p149d11jsnc68359967c0f'
         }
     };
     
@@ -66,7 +66,7 @@ async function fetchSellerDetails(catalogSellerId) {
         url: url,
         headers: {
             'x-rapidapi-host': 'realtime-walmart-data.p.rapidapi.com',
-            'x-rapidapi-key': 'efc5651cbcmshe26912fd81c7795p13e7afjsn07f94d690435'
+            'x-rapidapi-key': 'b9f300ae50msh337f637e3b499b7p149d11jsnc68359967c0f'
         }
     };
     
@@ -226,6 +226,14 @@ module.exports.enrichifyFile = async (req, res) => {
                 seller_id: productData.catalogSellerId || '',
                 seller_name: sellerData?.sellerName || '',
                 seller_rating: sellerData?.rating || '',
+                seller_email: sellerData?.sellerEmail || '',
+                seller_phone: sellerData?.sellerPhone || '',
+                seller_address_line1: sellerData?.seller_address?.address1 || '',
+                seller_address_line2: sellerData?.seller_address?.address2 || '',
+                seller_city: sellerData?.seller_address?.city || '',
+                seller_country: sellerData?.seller_address?.country || '',
+                seller_postal_code: sellerData?.seller_address?.postalCode || '',
+                
                 seller_feedback_count: sellerData?.feedbackCount || '',
                 seller_positive_feedback_percent: sellerData?.positiveFeedbackPercent || '',
                 enriched_at: new Date().toISOString()
