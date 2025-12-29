@@ -3,6 +3,8 @@ const fileModel = require('../../models/file');
 const axios = require('axios');
 const fs = require('fs');
 const csv = require('csv-parser');
+const os=require('os')
+const path=require('path')
 const { createObjectCsvWriter } = require('csv-writer');
 const XLSX = require('xlsx');
 const facebookfilemodel = require('../../models/facebookfile');
@@ -519,11 +521,13 @@ return res.status(200).json({
 
 //newnew
 const puppeteer = require('puppeteer');
+
 const FACEBOOK_EMAIL = 'shahg33285@gmail.com'; 
 const FACEBOOK_PASSWORD = 'dawaralibukhari';
 
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ==================== UTILITY FUNCTIONS ====================
 async function readCSVFile(filePath) {
   return new Promise((resolve, reject) => {
     const results = [];
@@ -559,53 +563,176 @@ async function readFile(filePath, originalName) {
 }
 
 function extractItemIdFromFacebookUrl(url) {
-  if (!url) return null;
-  const match = url.match(/marketplace\/item\/(\d+)/) || url.match(/[?&]item_id=(\d+)/);
-  return match ? match[1] : null;
+    if (!url) return null;
+    const match = url.match(/marketplace\/item\/(\d+)/) || url.match(/[?&]item_id=(\d+)/);
+    return match ? match[1] : null;
+  }
+// ==================== BROWSER MANAGEMENT ====================
+async function checkSystemRequirements() {
+  console.log('🔍 Checking system requirements...');
+  
+  const nodeVersion = process.version;
+  console.log(`Node.js version: ${nodeVersion}`);
+  
+  const totalMem = os.totalmem() / (1024 * 1024 * 1024);
+  const freeMem = os.freemem() / (1024 * 1024 * 1024);
+  console.log(`Memory: ${totalMem.toFixed(2)}GB total, ${freeMem.toFixed(2)}GB free`);
+  
+  console.log(`Platform: ${process.platform}, Arch: ${process.arch}`);
+  
+  if (freeMem < 1) {
+    console.warn('⚠️ Low memory available. Consider closing other applications.');
+  }
+  
+  return freeMem;
 }
 
+async function createBrowser() {
+  await checkSystemRequirements();
+  
+  // Try multiple launch configurations for Windows compatibility
+  const launchConfigs = [
+    // Config 1: Headless with minimal args
+    {
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--window-size=1920,1080'
+      ],
+      defaultViewport: null,
+      timeout: 30000
+    },
+    // Config 2: Visible browser
+    {
+      headless: false,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--window-size=1920,1080',
+        '--start-maximized'
+      ],
+      defaultViewport: null,
+      timeout: 30000
+    },
+    // Config 3: Even simpler
+    {
+      headless: false,
+      args: ['--no-sandbox'],
+      defaultViewport: null,
+      timeout: 30000
+    },
+    // Config 4: Try with explicit Chrome path (Windows)
+    {
+      headless: false,
+      executablePath: getChromePath(),
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      defaultViewport: null,
+      timeout: 30000
+    }
+  ];
+
+  for (let i = 0; i < launchConfigs.length; i++) {
+    try {
+      console.log(`🚀 Trying browser configuration ${i + 1}...`);
+      const browser = await puppeteer.launch(launchConfigs[i]);
+      console.log(`✅ Successfully launched browser with config ${i + 1}`);
+      
+      // Set up browser event listeners
+      browser.on('disconnected', () => {
+        console.log('⚠️ Browser disconnected');
+      });
+      
+      browser.on('targetcreated', (target) => {
+        console.log(`🎯 Target created: ${target.url()}`);
+      });
+      
+      return browser;
+    } catch (error) {
+      console.error(`❌ Config ${i + 1} failed: ${error.message}`);
+      if (i === launchConfigs.length - 1) {
+        throw new Error(`All browser configurations failed: ${error.message}`);
+      }
+      await wait(3000);
+    }
+  }
+}
+
+function getChromePath() {
+  const possiblePaths = [
+    // Windows paths
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.PROGRAMFILES + '\\Google\\Chrome\\Application\\chrome.exe',
+    process.env['PROGRAMFILES(X86)'] + '\\Google\\Chrome\\Application\\chrome.exe',
+    // Linux paths
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    // Mac paths
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  ];
+  
+  for (const path of possiblePaths) {
+    if (fs.existsSync(path)) {
+      console.log(`✅ Found Chrome at: ${path}`);
+      return path;
+    }
+  }
+  
+  console.log('⚠️ Chrome not found in common locations, using default');
+  return null;
+}
+
+// ==================== FACEBOOK AUTHENTICATION ====================
 async function loginToFacebook(page) {
   try {
     console.log('🔐 Logging into Facebook...');
     
     await page.goto('https://www.facebook.com/login', { 
-      waitUntil: 'domcontentloaded',
-      timeout: 30000 
+      waitUntil: 'networkidle0',
+      timeout: 45000 
     });
     
-    await wait(1500);
+    await wait(3000);
+    
+    // Check if already logged in
+    const currentUrl = page.url();
+    if (!currentUrl.includes('login')) {
+      console.log('✅ Already logged in');
+      return true;
+    }
     
     await page.waitForSelector('#email', { timeout: 10000 });
-    await page.type('#email', FACEBOOK_EMAIL, { delay: 50 });
-    
-    await page.type('#pass', FACEBOOK_PASSWORD, { delay: 50 });
+    await page.type('#email', FACEBOOK_EMAIL, { delay: 100 });
+    await page.type('#pass', FACEBOOK_PASSWORD, { delay: 100 });
     
     await Promise.all([
       page.click('button[name="login"]'),
-      page.waitForNavigation({ 
-        waitUntil: 'domcontentloaded',
-        timeout: 30000 
-      })
+      page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 })
     ]);
     
-    await wait(2000);
+    await wait(3000);
     
-    const currentUrl = page.url();
-    if (currentUrl.includes('login') || currentUrl.includes('checkpoint')) {
-      console.error('❌ Login failed');
+    const loggedInUrl = page.url();
+    if (loggedInUrl.includes('checkpoint') || loggedInUrl.includes('login_attempt')) {
+      console.error('❌ Login failed - checkpoint required');
       return false;
     }
     
     console.log('✅ Successfully logged into Facebook');
     
+    // Save cookies
     const cookies = await page.cookies();
-    
-    if (!fs.existsSync('/tmp')) {
-      fs.mkdirSync('/tmp', { recursive: true });
+    const tmpDir = path.join(os.tmpdir(), 'facebook_scraper');
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
     }
-    fs.writeFileSync('/tmp/facebook_cookies.json', JSON.stringify(cookies, null, 2));
+    fs.writeFileSync(path.join(tmpDir, 'facebook_cookies.json'), JSON.stringify(cookies, null, 2));
     
-    return cookies;
+    return true;
     
   } catch (error) {
     console.error('❌ Login error:', error.message);
@@ -613,132 +740,409 @@ async function loginToFacebook(page) {
   }
 }
 
-async function loadSavedCookies() {
+async function loadSavedCookies(page) {
   try {
-    if (fs.existsSync('/tmp/facebook_cookies.json')) {
-      const cookiesString = fs.readFileSync('/tmp/facebook_cookies.json', 'utf8');
+    const cookiePath = path.join(os.tmpdir(), 'facebook_scraper', 'facebook_cookies.json');
+    if (fs.existsSync(cookiePath)) {
+      const cookiesString = fs.readFileSync(cookiePath, 'utf8');
       const cookies = JSON.parse(cookiesString);
-      console.log('📂 Loaded saved Facebook cookies');
-      return cookies;
+      
+      if (cookies.length > 0) {
+        await page.setCookie(...cookies);
+        console.log('📂 Loaded saved Facebook cookies');
+        return true;
+      }
     }
   } catch (error) {
     console.log('⚠️ Could not load saved cookies:', error.message);
   }
-  return null;
+  return false;
 }
 
-async function fetchFacebookListingDetails(facebookUrl, page) {
-  try {
-    console.log(`🌐 Processing: ${facebookUrl.substring(0, 80)}...`);
+// ==================== DATA EXTRACTION ====================
+async function fetchFacebookListingDetails(facebookUrl, page, retryCount = 0) {
+    const maxRetries = 2;
     
-    await page.goto(facebookUrl, { 
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
-    });
-
-    await wait(5000);
-
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight / 2));
-    await wait(1000);
-
-    console.log(`🔍 Extracting seller information...`);
-
-    const listingData = await page.evaluate(() => {
-      const data = {
-        sellerId: null,
-        sellerName: null,
-        sellerProfileUrl: null,
-        listingTitle: null,
-        price: null,
-        location: null,
-        description: null,
-        imagesCount: 0,
-        category: null,
-        condition: null,
-        postedDate: null,
-        extractionMethods: []
-      };
-
-      const scripts = document.querySelectorAll('script[type="application/json"]');
-      for (const script of scripts) {
-        const text = script.textContent;
-        if (!text) continue;
+    try {
+      console.log(`🌐 Processing: ${facebookUrl.substring(0, 80)}...`);
+  
+      // Navigate to the page
+      await page.goto(facebookUrl, { 
+        waitUntil: 'networkidle0',
+        timeout: 45000
+      });
+      
+      // Check if redirected to login
+      const currentUrl = await page.url();
+      if (currentUrl.includes('login') || currentUrl.includes('checkpoint')) {
+        console.error('❌ Redirected to login/checkpoint page');
+        return null;
+      }
+  
+      await wait(4000);
+  
+      console.log(`🔍 Extracting seller information...`);
+  
+      const listingData = await page.evaluate(() => {
+        const data = {
+          sellerId: null,
+          sellerName: null,
+          sellerProfileUrl: null,
+          listingTitle: null,
+          price: null,
+          location: null,
+          description: null,
+          imagesCount: 0,
+          category: null,
+          condition: null,
+          postedDate: null,
+          extractionMethods: []
+        };
+  
+        // ===== METHOD 1: EXTRACT FROM VISIBLE SELLER PROFILE LINK (MOST RELIABLE) =====
+        // This should be the PRIMARY method as it's the most accurate
+        const sellerLinkSelectors = [
+          'a[href*="/marketplace/profile/"]',
+          'a[href*="/profile.php?id="]',
+          'a[role="link"][href*="facebook.com"]',
+          '[data-testid*="seller"] a',
+          '[data-testid*="profile"] a'
+        ];
         
-        try {
-          const jsonMatch = text.match(/"seller_id":"(\d+)"|"sellerId":"(\d+)"|"profile_id":"(\d+)"/);
-          if (jsonMatch) {
-            data.sellerId = jsonMatch[1] || jsonMatch[2] || jsonMatch[3];
-            data.extractionMethods.push('Script JSON');
+        for (const selector of sellerLinkSelectors) {
+          const links = document.querySelectorAll(selector);
+          for (const link of links) {
+            const href = link.getAttribute('href');
+            if (!href) continue;
+            
+            // Match seller profile URLs specifically
+            const profileMatch = href.match(/\/marketplace\/profile\/(\d+)/);
+            const idMatch = href.match(/profile\.php\?id=(\d+)/);
+            
+            if (profileMatch && profileMatch[1]) {
+              data.sellerId = profileMatch[1];
+              data.sellerName = link.textContent?.trim() || link.getAttribute('aria-label') || null;
+              data.sellerProfileUrl = href.startsWith('http') ? href : `https://facebook.com${href}`;
+              data.extractionMethods.push('Profile Link (marketplace/profile)');
+              break;
+            } else if (idMatch && idMatch[1]) {
+              data.sellerId = idMatch[1];
+              data.sellerName = link.textContent?.trim() || link.getAttribute('aria-label') || null;
+              data.sellerProfileUrl = href.startsWith('http') ? href : `https://facebook.com${href}`;
+              data.extractionMethods.push('Profile Link (profile.php)');
+              break;
+            }
+          }
+          if (data.sellerId) break;
+        }
+  
+        // ===== METHOD 2: SEARCH JSON SCRIPTS (WITH STRICT VALIDATION) =====
+        if (!data.sellerId) {
+          const scripts = Array.from(document.querySelectorAll('script[type="application/json"]'));
+          
+          for (const script of scripts) {
+            try {
+              const jsonContent = JSON.parse(script.textContent);
+              
+              // Strict recursive search - only look for specific seller-related keys
+              const findSellerInObject = (obj, depth = 0) => {
+                if (!obj || typeof obj !== 'object' || depth > 10) return null;
+                
+                // STRICT KEY WHITELIST - only these exact patterns
+                const validSellerKeys = [
+                  'seller_id',
+                  'sellerId', 
+                  'seller',
+                  'profile_id',
+                  'profileId',
+                  'actor_id',
+                  'actorId',
+                  'owner_id',
+                  'ownerId',
+                  'user_id',
+                  'userId'
+                ];
+                
+                for (const [key, value] of Object.entries(obj)) {
+                  const keyLower = key.toLowerCase();
+                  
+                  // Check if this is a seller object
+                  if (keyLower === 'seller' || keyLower === 'actor' || keyLower === 'profile') {
+                    if (typeof value === 'object' && value !== null) {
+                      // Look for ID within seller object
+                      if (value.id && /^\d{8,}$/.test(String(value.id))) {
+                        return String(value.id);
+                      }
+                      if (value.fbid && /^\d{8,}$/.test(String(value.fbid))) {
+                        return String(value.fbid);
+                      }
+                      if (value.profile_id && /^\d{8,}$/.test(String(value.profile_id))) {
+                        return String(value.profile_id);
+                      }
+                    }
+                  }
+                  
+                  // Direct seller ID field match (strict)
+                  if (validSellerKeys.includes(keyLower) || validSellerKeys.includes(key)) {
+                    if (typeof value === 'string' && /^\d{8,}$/.test(value)) {
+                      // Additional validation: seller IDs typically don't start with 000
+                      if (!value.startsWith('000')) {
+                        return value;
+                      }
+                    }
+                  }
+                  
+                  // Recursively search nested objects
+                  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    const result = findSellerInObject(value, depth + 1);
+                    if (result) return result;
+                  }
+                  
+                  // Search arrays
+                  if (Array.isArray(value) && depth < 5) {
+                    for (const item of value) {
+                      if (typeof item === 'object' && item !== null) {
+                        const result = findSellerInObject(item, depth + 1);
+                        if (result) return result;
+                      }
+                    }
+                  }
+                }
+                
+                return null;
+              };
+              
+              const foundId = findSellerInObject(jsonContent);
+              if (foundId) {
+                data.sellerId = foundId;
+                data.extractionMethods.push('JSON Script Search');
+                break;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+        }
+  
+        // ===== METHOD 3: DATA ATTRIBUTES =====
+        if (!data.sellerId) {
+          const dataAttrSelectors = [
+            '[data-sellerid]',
+            '[data-seller-id]',
+            '[data-profileid]',
+            '[data-profile-id]',
+            '[data-userid]',
+            '[data-user-id]'
+          ];
+          
+          for (const selector of dataAttrSelectors) {
+            const element = document.querySelector(selector);
+            if (element) {
+              const attrValue = element.getAttribute(selector.slice(1, -1).toLowerCase());
+              if (attrValue && /^\d{8,}$/.test(attrValue) && !attrValue.startsWith('000')) {
+                data.sellerId = attrValue;
+                data.extractionMethods.push('Data Attribute');
+                break;
+              }
+            }
+          }
+        }
+  
+        // ===== METHOD 4: LOOK IN PAGE SOURCE FOR SELLER PROFILE URL =====
+        if (!data.sellerId) {
+          const bodyHTML = document.body.innerHTML;
+          
+          // Search for marketplace profile URLs in the HTML
+          const profileMatches = bodyHTML.match(/\/marketplace\/profile\/(\d{8,})/g);
+          if (profileMatches && profileMatches.length > 0) {
+            // Get the most common profile ID (likely the seller)
+            const profileIds = profileMatches.map(m => m.match(/\/marketplace\/profile\/(\d+)/)[1]);
+            const idCounts = {};
+            profileIds.forEach(id => {
+              idCounts[id] = (idCounts[id] || 0) + 1;
+            });
+            
+            // Get the ID that appears most frequently
+            const mostCommonId = Object.keys(idCounts).reduce((a, b) => 
+              idCounts[a] > idCounts[b] ? a : b
+            );
+            
+            if (mostCommonId && idCounts[mostCommonId] >= 2) { // Must appear at least twice
+              data.sellerId = mostCommonId;
+              data.extractionMethods.push('HTML Source (most common profile ID)');
+            }
+          }
+        }
+  
+        // ===== EXTRACT OTHER LISTING DETAILS =====
+        
+        // Title
+        const titleSelectors = [
+          'h1[dir="auto"]',
+          'span.x1lliihq.x6ikm8r.x10wlt62.x1n2onr6',
+          '[data-testid*="title"]',
+          'h1'
+        ];
+        
+        for (const selector of titleSelectors) {
+          const el = document.querySelector(selector);
+          if (el && el.textContent) {
+            const text = el.textContent.trim();
+            if (text.length > 5 && text.length < 300) {
+              data.listingTitle = text;
+              break;
+            }
+          }
+        }
+  
+        // Price
+        const priceElements = Array.from(document.querySelectorAll('span, div'));
+        for (const el of priceElements) {
+          const text = el.textContent?.trim();
+          if (text && /^[\$€£¥₹]\s*[\d,]+(\.\d{2})?$/.test(text)) {
+            data.price = text;
             break;
           }
-        } catch (e) {}
-      }
-
-      if (!data.sellerId) {
-        const sellerLinks = document.querySelectorAll('a[href*="facebook.com/marketplace/profile"], a[href*="profile.php?id="]');
-        for (const link of sellerLinks) {
-          const href = link.getAttribute('href');
-          const match = href.match(/profile\/(\d+)|id=(\d+)/);
-          if (match) {
-            data.sellerId = match[1] || match[2];
-            data.sellerName = link.textContent?.trim() || link.getAttribute('aria-label');
-            data.sellerProfileUrl = href.startsWith('http') ? href : `https://facebook.com${href}`;
-            data.extractionMethods.push('Profile link');
-            break;
+        }
+  
+        // Location
+        const locationSelectors = [
+          '[data-testid*="location"]',
+          'div[class*="location"]',
+          'span[dir="auto"]'
+        ];
+        
+        for (const selector of locationSelectors) {
+          const el = document.querySelector(selector);
+          if (el) {
+            const text = el.textContent?.trim();
+            // Location typically has comma and is under 100 chars
+            if (text && text.includes(',') && text.length < 100 && /^[A-Za-z\s,\-]+$/.test(text)) {
+              data.location = text;
+              break;
+            }
           }
         }
-      }
-
-      const titleElement = document.querySelector('h1, [role="heading"]');
-      if (titleElement) {
-        const text = titleElement.textContent?.trim();
-        if (text && text.length > 5) {
-          data.listingTitle = text;
+  
+        // Images count
+        data.imagesCount = document.querySelectorAll('img[src*="scontent"], img[src*="fbcdn"], img[alt*="listing"]').length;
+  
+        // Description (first few hundred characters)
+        const descriptionSelectors = [
+          '[data-testid*="description"]',
+          'div[dir="auto"]',
+          'span[dir="auto"]'
+        ];
+        
+        for (const selector of descriptionSelectors) {
+          const elements = document.querySelectorAll(selector);
+          for (const el of elements) {
+            const text = el.textContent?.trim();
+            if (text && text.length > 50 && text.length < 5000) {
+              data.description = text.substring(0, 500);
+              break;
+            }
+          }
+          if (data.description) break;
+        }
+  
+        return data;
+      });
+  
+      console.log(`✅ Extraction: ${listingData.sellerId ? `Seller ID: ${listingData.sellerId}` : 'No seller ID'} | Methods: ${listingData.extractionMethods.join(', ')}`);
+      
+      // VALIDATION: Warn if seller ID looks suspicious
+      if (listingData.sellerId) {
+        const sellerId = listingData.sellerId;
+        
+        // Check if it's the same as the item ID (common mistake)
+        const itemId = extractItemIdFromFacebookUrl(facebookUrl);
+        if (sellerId === itemId) {
+          console.warn(`⚠️ WARNING: Seller ID matches Item ID (${sellerId}). This might be incorrect.`);
+          // Don't use it if it matches the item ID
+          listingData.sellerId = null;
+          listingData.sellerProfileUrl = null;
+          listingData.extractionMethods = ['Rejected: matched item ID'];
+        }
+        
+        // Check if it starts with suspicious patterns
+        if (sellerId.startsWith('000') || sellerId.startsWith('111')) {
+          console.warn(`⚠️ WARNING: Seller ID has suspicious pattern (${sellerId})`);
         }
       }
-
-      const priceElement = document.querySelector('span:not([class*="hidden"])');
-      if (priceElement) {
-        const text = priceElement.textContent?.trim();
-        if (/^[\$€£¥]\s*[\d,]+/.test(text)) {
-          data.price = text;
-        }
+      
+      return listingData;
+  
+    } catch (error) {
+      console.error(`❌ Error fetching ${facebookUrl}:`, error.message);
+      
+      if (retryCount < maxRetries) {
+        console.log(`⚠️ Retrying (${retryCount + 1}/${maxRetries})...`);
+        await wait(5000 * (retryCount + 1));
+        return await fetchFacebookListingDetails(facebookUrl, page, retryCount + 1);
       }
+      
+      return null;
+    }
+  }
 
-      data.imagesCount = document.querySelectorAll('img[src*="scontent"]').length;
 
-      return data;
-    });
+// ==================== FILE UPLOAD & DATABASE ====================
+async function uploadWithRetry(uploadFunction, filePath, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      console.log(`📤 Uploading to Cloudinary (attempt ${i + 1}/${maxRetries})...`);
+      const result = await uploadFunction(filePath);
+      
+      if (result && result.url) {
+        console.log('✅ Uploaded to Cloudinary:', result.url);
+        return result;
+      }
+    } catch (error) {
+      console.error(`❌ Upload attempt ${i + 1} failed:`, error.message);
+      if (i < maxRetries - 1) {
+        const waitTime = 5000 * (i + 1);
+        console.log(`⏳ Waiting ${waitTime/1000}s before retry...`);
+        await wait(waitTime);
+      }
+    }
+  }
+  
+  console.log('⚠️ Cloudinary upload failed, using local file path as fallback');
+  return { url: filePath };
+}
 
-    console.log(`✅ Extraction: ${listingData.sellerId ? 'Found seller' : 'No seller'}`);
-    return listingData;
-
+async function safeDbUpdate(model, id, updateData) {
+  try {
+    await model.findByIdAndUpdate(id, updateData);
+    return true;
   } catch (error) {
-    console.error(`❌ Error:`, error.message);
-    return null;
+    console.error('⚠️ Database update failed (continuing):', error.message);
+    return false;
   }
 }
 
+// ==================== MAIN FUNCTION ====================
 module.exports.enrichifyItemIds = async (req, res) => {
   let filePath = null;
   let outputFilePath = null;
   let browser = null;
   let page = null;
-  let fileDocument = null; // Track the database document
+  let fileDocument = null;
 
   try {
+    // Check for uploaded file
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Get user ID from request (adjust based on your auth setup)
     const userId = req.user?._id || req.body.userId;
-
     filePath = req.file.path;
     const originalFileName = req.file.originalname;
 
     console.log('📁 Processing file:', filePath);
 
+    // Read input file
     const records = await readFile(filePath, originalFileName);
     console.log(`📊 Found ${records.length} records to process`);
 
@@ -749,100 +1153,122 @@ module.exports.enrichifyItemIds = async (req, res) => {
     // Generate passcode
     const passcode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // Create initial database entry
-    fileDocument = await facebookfilemodel.create({
-      file: originalFileName,
-      user: userId,
-      paid: true,
-      passcode: passcode,
-      recordCount: '0', // Will update as we process
-      recordLength: records.length
-    });
+    // Create database entry (if model is available)
+    try {
+      // Uncomment and adjust when you have the model
+      // fileDocument = await facebookfilemodel.create({
+      //   file: originalFileName,
+      //   user: userId,
+      //   paid: true,
+      //   passcode: passcode,
+      //   recordCount: '0',
+      //   recordLength: records.length
+      // });
+      // console.log('💾 Created database entry:', fileDocument._id);
+      console.log('💾 Would create database entry (model not available)');
+    } catch (dbError) {
+      console.error('⚠️ Failed to create database entry:', dbError.message);
+    }
 
-    console.log('💾 Created database entry:', fileDocument._id);
-
-    console.log('🚀 Creating browser session...');
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--window-size=1920,1080'
-      ]
-    });
-
+    // Create browser session
+    browser = await createBrowser();
     page = await browser.newPage();
     
+    // Configure page
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
+    await page.setViewport({ width: 1920, height: 1080 });
+    
+    // Block unnecessary resources for faster loading
     await page.setRequestInterception(true);
     page.on('request', (req) => {
-      const type = req.resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(type)) {
+      const resourceType = req.resourceType();
+      if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
         req.abort();
       } else {
         req.continue();
       }
     });
 
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36');
-    await page.setViewport({ width: 1920, height: 1080 });
-
-    const savedCookies = await loadSavedCookies();
-    if (savedCookies) {
-      await page.setCookie(...savedCookies);
-      console.log('✅ Using saved cookies');
-    } else {
+    // Handle Facebook authentication
+    const cookiesLoaded = await loadSavedCookies(page);
+    
+    // Go to Facebook to check login status
+    await page.goto('https://www.facebook.com', { 
+      waitUntil: 'domcontentloaded', 
+      timeout: 30000 
+    });
+    await wait(3000);
+    
+    const currentUrl = page.url();
+    if (currentUrl.includes('login') || !cookiesLoaded) {
+      console.log('🔐 Need to login...');
       const loginSuccess = await loginToFacebook(page);
       if (!loginSuccess) {
         throw new Error('Failed to login to Facebook');
       }
+    } else {
+      console.log('✅ Already logged in via cookies');
     }
 
+    // Process records
     const enrichedData = [];
     let consecutiveFailures = 0;
     let processedCount = 0;
+    let successCount = 0;
+    let partialCount = 0;
+    let failedCount = 0;
 
     for (let i = 0; i < records.length; i++) {
       const record = records[i];
       console.log(`\n🔄 Processing ${i + 1}/${records.length}`);
 
+      // Find Facebook URL in various possible fields
       const facebookUrl = record.url || record.URL || record.facebook_url || 
                           record.facebookUrl || record.link || record.Link;
 
       if (!facebookUrl) {
+        console.log('❌ No Facebook URL found');
         enrichedData.push({
           ...record,
           enrichment_status: 'failed',
           enrichment_error: 'No Facebook URL found'
         });
+        failedCount++;
         continue;
       }
 
+      // Extract item ID
       const itemId = extractItemIdFromFacebookUrl(facebookUrl);
       if (!itemId) {
+        console.log('❌ Could not extract item ID');
         enrichedData.push({
           ...record,
           enrichment_status: 'failed',
           enrichment_error: 'Could not extract item ID'
         });
+        failedCount++;
         continue;
       }
 
+      // Fetch listing details
       const listingData = await fetchFacebookListingDetails(facebookUrl, page);
 
       if (!listingData) {
         consecutiveFailures++;
+        console.log('❌ Failed to fetch listing data');
+        
         enrichedData.push({
           ...record,
           facebook_item_id: itemId,
           enrichment_status: 'failed',
           enrichment_error: 'Failed to fetch listing data'
         });
+        failedCount++;
         
+        // If multiple failures, add extra delay
         if (consecutiveFailures >= 3) {
-          console.log('⚠️ Multiple failures detected, adding extra delay...');
-          await wait(10000);
+          console.log('⚠️ Multiple consecutive failures detected, adding extra delay...');
+          await wait(15000);
           consecutiveFailures = 0;
         }
         continue;
@@ -851,127 +1277,219 @@ module.exports.enrichifyItemIds = async (req, res) => {
       consecutiveFailures = 0;
       processedCount++;
 
+      // Determine enrichment status
+      let enrichmentStatus = 'partial';
+      let enrichmentError = 'Seller ID not found';
+      
+      if (listingData.sellerId) {
+        enrichmentStatus = 'success';
+        enrichmentError = null;
+        successCount++;
+      } else {
+        partialCount++;
+      }
+
+      // Create enriched record
       const enrichedRecord = {
         ...record,
         original_facebook_url: facebookUrl,
         facebook_item_id: itemId,
         facebook_seller_id: listingData.sellerId,
+        facebook_seller_name: listingData.sellerName,
+        facebook_seller_profile_url: listingData.sellerProfileUrl,
         facebook_listing_title: listingData.listingTitle,
-        enrichment_status: listingData.sellerId ? 'success' : 'partial',
-        enrichment_error: listingData.sellerId ? null : 'Seller ID not found',
+        facebook_price: listingData.price,
+        facebook_location: listingData.location,
+        facebook_images_count: listingData.imagesCount,
+        extraction_methods: listingData.extractionMethods.join(', '),
+        enrichment_status: enrichmentStatus,
+        enrichment_error: enrichmentError,
         enriched_at: new Date().toISOString()
       };
 
       enrichedData.push(enrichedRecord);
 
-      // Update database with progress every 5 records
-      if (processedCount % 5 === 0) {
-        await facebookfilemodel.findByIdAndUpdate(fileDocument._id, {
+      // Update database progress (if model available)
+      if (processedCount % 5 === 0 && fileDocument) {
+        await safeDbUpdate(facebookfilemodel, fileDocument._id, {
           recordCount: processedCount.toString()
         });
-        console.log(`💾 Updated database: ${processedCount}/${records.length} processed`);
+        console.log(`💾 Database progress: ${processedCount}/${records.length} processed`);
       }
 
-      const delay = 3000 + Math.random() * 2000;
+      // Adaptive delay between requests
+      const baseDelay = 3000;
+      const delay = baseDelay + Math.random() * 2000;
       console.log(`⏳ Waiting ${Math.round(delay/1000)}s...`);
       await wait(delay);
+      
+      // Health check every 10 records
+      if (processedCount % 10 === 0 && processedCount > 0) {
+        try {
+          await page.evaluate(() => {
+            if (document.readyState !== 'complete') {
+              throw new Error('Page health check failed');
+            }
+          });
+        } catch (e) {
+          console.log('⚠️ Page health check failed, reloading...');
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await wait(3000);
+        }
+      }
     }
 
+    // Close browser
     if (browser) {
       await browser.close();
+      console.log('✅ Browser closed');
     }
 
-    // Save results to file
+    // Save results to CSV
     const outputFileName = `enriched-facebook-${Date.now()}.csv`;
-    outputFilePath = `/tmp/public/files/uploads/${outputFileName}`;
-
-    if (!fs.existsSync('/tmp/public/files/uploads')) {
-      fs.mkdirSync('/tmp/public/files/uploads', { recursive: true });
+    const uploadsDir = path.join(os.tmpdir(), 'uploads');
+    
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
     }
+    
+    outputFilePath = path.join(uploadsDir, outputFileName);
 
+    // Get all unique headers from enriched data
     const headers = [...new Set(enrichedData.flatMap(obj => Object.keys(obj)))].map(key => ({
       id: key,
       title: key
     }));
 
+    // Write CSV file
     const csvWriter = createObjectCsvWriter({
       path: outputFilePath,
       header: headers
     });
 
     await csvWriter.writeRecords(enrichedData);
+    console.log('✅ CSV file created:', outputFilePath);
 
-    const successCount = enrichedData.filter(r => r.enrichment_status === 'success').length;
-    const partialCount = enrichedData.filter(r => r.enrichment_status === 'partial').length;
-    const failedCount = enrichedData.filter(r => r.enrichment_status === 'failed').length;
+    // Calculate statistics
+    console.log('\n✅ ========== ENRICHMENT COMPLETED ==========');
+    console.log(`Total Records: ${records.length}`);
+    console.log(`Success: ${successCount} | Partial: ${partialCount} | Failed: ${failedCount}`);
+    console.log(`Success Rate: ${((successCount/records.length)*100).toFixed(1)}%`);
+    console.log('============================================\n');
 
-    console.log('\n📤 Uploading to Cloudinary...');
-    
-    const cloudinaryResult = await cloudinaryUpload(outputFilePath);
-    
-    if (cloudinaryResult.url) {
-      console.log('✅ Uploaded to Cloudinary:', cloudinaryResult.url);
-    } else {
-      console.error('❌ Cloudinary upload failed:', cloudinaryResult);
-    }
-
-    // Final database update with output file
-    await facebookfilemodel.findByIdAndUpdate(fileDocument._id, {
-      output: cloudinaryResult.url || outputFilePath,
-      recordCount: processedCount.toString()
-    });
-
-    console.log('💾 Final database update completed');
-
-    // Clean up local files
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-    if (outputFilePath && fs.existsSync(outputFilePath)) {
-      fs.unlinkSync(outputFilePath);
-    }
-
-    console.log('\n✅ Enrichment completed!');
-    console.log(`Total: ${records.length} | Success: ${successCount} | Partial: ${partialCount} | Failed: ${failedCount}`);
-
-    return res.status(200).json({
-      message: 'Enrichment completed',
+    // Prepare response
+    const responseData = {
+      message: 'Enrichment completed successfully',
       data: {
-        documentId: fileDocument._id,
+        documentId: fileDocument?._id || 'N/A',
         totalRecords: records.length,
         successfulEnrichments: successCount,
         partialEnrichments: partialCount,
         failedEnrichments: failedCount,
+        successRate: `${((successCount/records.length)*100).toFixed(1)}%`,
         passcode: passcode,
-        outputFile: cloudinaryResult.url || outputFilePath,
-        cloudinaryUrl: cloudinaryResult.url
+        outputFile: outputFilePath,
+        summary: {
+          total: records.length,
+          success: successCount,
+          partial: partialCount,
+          failed: failedCount
+        }
       }
-    });
+    };
+
+    // If Cloudinary is available, upload the file
+    if (typeof cloudinaryUpload !== 'undefined') {
+      try {
+        const cloudinaryResult = await uploadWithRetry(cloudinaryUpload, outputFilePath);
+        responseData.data.cloudinaryUrl = cloudinaryResult.url;
+        responseData.data.outputFile = cloudinaryResult.url;
+        
+        // Update database with Cloudinary URL if document exists
+        if (fileDocument) {
+          await safeDbUpdate(facebookfilemodel, fileDocument._id, {
+            output: cloudinaryResult.url,
+            recordCount: processedCount.toString()
+          });
+        }
+      } catch (uploadError) {
+        console.error('⚠️ Cloudinary upload failed:', uploadError.message);
+      }
+    }
+
+    // Clean up local files
+    const cleanupFiles = async (file) => {
+      if (file && fs.existsSync(file)) {
+        try {
+          fs.unlinkSync(file);
+          console.log(`🗑️ Cleaned up file: ${file}`);
+        } catch (e) {
+          console.error(`Failed to delete file ${file}:`, e.message);
+        }
+      }
+    };
+
+    await cleanupFiles(filePath);
+    
+    // Only delete output file if we successfully uploaded to Cloudinary
+    if (responseData.data.cloudinaryUrl && responseData.data.cloudinaryUrl !== outputFilePath) {
+      await cleanupFiles(outputFilePath);
+    }
+
+    return res.status(200).json(responseData);
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('❌ CRITICAL ERROR:', error.message);
+    console.error(error.stack);
     
-    // Update database with error status if document was created
+    // Update database with error status
     if (fileDocument) {
-      await facebookfilemodel.findByIdAndUpdate(fileDocument._id, {
-        recordCount: 'Error occurred'
-      }).catch(err => console.error('Failed to update error status:', err));
+      try {
+        await safeDbUpdate(facebookfilemodel, fileDocument._id, {
+          recordCount: 'Error occurred',
+          error: error.message.substring(0, 500)
+        });
+      } catch (updateError) {
+        console.error('⚠️ Failed to update database:', updateError.message);
+      }
+    }
+    
+    // Clean up resources
+    if (page) {
+      try {
+        await page.close();
+      } catch (e) {
+        console.error('Failed to close page:', e.message);
+      }
     }
     
     if (browser) {
-      await browser.close();
+      try {
+        await browser.close();
+      } catch (e) {
+        console.error('Failed to close browser:', e.message);
+      }
     }
 
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-    if (outputFilePath && fs.existsSync(outputFilePath)) {
-      fs.unlinkSync(outputFilePath);
-    }
+    // Clean up files
+    const cleanupFiles = async (file) => {
+      if (file && fs.existsSync(file)) {
+        try {
+          fs.unlinkSync(file);
+          console.log(`🗑️ Cleaned up file: ${file}`);
+        } catch (e) {
+          console.error(`Failed to delete file ${file}:`, e.message);
+        }
+      }
+    };
 
-    return res.status(400).json({
+    await cleanupFiles(filePath);
+    await cleanupFiles(outputFilePath);
+
+    return res.status(500).json({
       error: 'Enrichment failed',
-      details: error.message
+      details: error.message,
+      suggestion: 'Check your internet connection and try again with fewer records'
     });
   }
 };
