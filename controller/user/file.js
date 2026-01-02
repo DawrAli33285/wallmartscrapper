@@ -647,18 +647,7 @@ async function createBrowser() {
   for (let i = 0; i < launchConfigs.length; i++) {
     try {
       console.log(`🚀 Trying browser configuration ${i + 1}...`);
-      const browser = await puppeteer.launch({
-        executablePath: getChromePath(),
-        headless: true,
-        args: [
-          '--no-sandbox',          // Required on EC2
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu'
-        ],
-        defaultViewport: null,
-        timeout: 30000
-      });
+      const browser = await puppeteer.launch(launchConfigs[i]);
       
       
       console.log(`✅ Successfully launched browser with config ${i + 1}`);
@@ -685,21 +674,27 @@ async function createBrowser() {
 
 function getChromePath() {
   const possiblePaths = [
-    '/usr/bin/google-chrome',       // Our installed Google Chrome
-    '/usr/bin/google-chrome-stable' // fallback
+    '/snap/bin/chromium',            // Snap Chromium (what you have installed)
+    '/usr/bin/google-chrome',        
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium'
   ];
 
   for (const path of possiblePaths) {
-    if (fs.existsSync(path)) {
-      console.log(`✅ Found Chrome at: ${path}`);
-      return path;
+    try {
+      if (fs.existsSync(path)) {
+        console.log(`✅ Found Chrome at: ${path}`);
+        return path;
+      }
+    } catch (e) {
+      continue;
     }
   }
 
   console.warn('⚠️ Chrome not found in common locations');
   return null;
 }
-
 
 // ==================== FACEBOOK AUTHENTICATION ====================
 async function loginToFacebook(page) {
