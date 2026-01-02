@@ -520,7 +520,6 @@ return res.status(200).json({
 
 
 //newnew
-const puppeteer = require('puppeteer');
 
 const FACEBOOK_EMAIL = 'shahg33285@gmail.com'; 
 const FACEBOOK_PASSWORD = 'dawaralibukhari';
@@ -588,6 +587,8 @@ async function checkSystemRequirements() {
 }
 
 async function createBrowser() {
+  const puppeteer = require('puppeteer');
+
   await checkSystemRequirements();
   
   
