@@ -684,10 +684,11 @@ async function createBrowser() {
 }
 
 function getChromePath() {
+  // Hardcode Snap path first (works on EC2)
   const possiblePaths = [
-    '/snap/bin/chromium',            // Snap Chromium (Ubuntu EC2)
-    '/usr/bin/chromium-browser',     // Debian/older Ubuntu
-    '/usr/bin/chromium',             // Debian/Ubuntu alternative
+    '/snap/bin/chromium',             // Snap Chromium (Ubuntu EC2)
+    '/usr/bin/chromium-browser',      // Older Ubuntu/Debian
+    '/usr/bin/chromium',              // Alternative
     '/usr/bin/google-chrome-stable',
     '/usr/bin/google-chrome'
   ];
@@ -706,6 +707,7 @@ function getChromePath() {
   console.warn('⚠️ Chrome not found in common locations');
   return null;
 }
+
 
 
 // ==================== FACEBOOK AUTHENTICATION ====================
