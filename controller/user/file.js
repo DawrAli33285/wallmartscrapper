@@ -590,10 +590,17 @@ async function checkSystemRequirements() {
 async function createBrowser() {
   await checkSystemRequirements();
   
-  // Try multiple launch configurations for Windows compatibility
+  
+  // Check for Chrome/Chromium installation
+  const chromePath = getChromePath();
+  if (!chromePath) {
+    throw new Error('Chrome/Chromium not found. Please install: sudo apt-get install -y chromium-browser');
+  }
+
   const launchConfigs = [
     // Config 1: Headless with minimal args
     {
+      executablePath: chromePath,
       headless: 'new',
       args: [
         '--no-sandbox',
@@ -606,9 +613,11 @@ async function createBrowser() {
       timeout: 30000
     },
     // Config 2: Visible browser
-    {
-      headless: false,
-      args: [
+    
+      {
+        executablePath: chromePath,
+        headless: false,
+        args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--window-size=1920,1080',
@@ -619,6 +628,7 @@ async function createBrowser() {
     },
     // Config 3: Even simpler
     {
+      executablePath: chromePath,
       headless: false,
       args: ['--no-sandbox'],
       defaultViewport: null,
@@ -662,6 +672,12 @@ async function createBrowser() {
 
 function getChromePath() {
   const possiblePaths = [
+    // Linux paths (check first for EC2)
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/snap/bin/chromium',
     // Windows paths
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
