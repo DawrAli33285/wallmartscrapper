@@ -647,7 +647,20 @@ async function createBrowser() {
   for (let i = 0; i < launchConfigs.length; i++) {
     try {
       console.log(`🚀 Trying browser configuration ${i + 1}...`);
-      const browser = await puppeteer.launch(launchConfigs[i]);
+      const browser = await puppeteer.launch({
+        executablePath: getChromePath(),
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--window-size=1920,1080'
+        ],
+        defaultViewport: null,
+        timeout: 30000
+      });
+      
       console.log(`✅ Successfully launched browser with config ${i + 1}`);
       
       // Set up browser event listeners
@@ -672,35 +685,28 @@ async function createBrowser() {
 
 function getChromePath() {
   const possiblePaths = [
-    // Linux paths (check first for EC2)
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium',
+    '/snap/bin/chromium',            // Snap Chromium (Ubuntu EC2)
+    '/usr/bin/chromium-browser',     // Debian/older Ubuntu
+    '/usr/bin/chromium',             // Debian/Ubuntu alternative
     '/usr/bin/google-chrome-stable',
-    '/usr/bin/google-chrome',
-    '/snap/bin/chromium',
-    // Windows paths
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    process.env.LOCALAPPDATA + '\\Google\\Chrome\\Application\\chrome.exe',
-    process.env.PROGRAMFILES + '\\Google\\Chrome\\Application\\chrome.exe',
-    process.env['PROGRAMFILES(X86)'] + '\\Google\\Chrome\\Application\\chrome.exe',
-    // Linux paths
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser',
-    // Mac paths
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    '/usr/bin/google-chrome'
   ];
-  
+
   for (const path of possiblePaths) {
-    if (fs.existsSync(path)) {
-      console.log(`✅ Found Chrome at: ${path}`);
-      return path;
+    try {
+      if (fs.existsSync(path)) {
+        console.log(`✅ Found Chrome at: ${path}`);
+        return path;
+      }
+    } catch (err) {
+      continue;
     }
   }
-  
-  console.log('⚠️ Chrome not found in common locations, using default');
+
+  console.warn('⚠️ Chrome not found in common locations');
   return null;
 }
+
 
 // ==================== FACEBOOK AUTHENTICATION ====================
 async function loginToFacebook(page) {
