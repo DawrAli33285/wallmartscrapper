@@ -647,19 +647,7 @@ async function createBrowser() {
   for (let i = 0; i < launchConfigs.length; i++) {
     try {
       console.log(`🚀 Trying browser configuration ${i + 1}...`);
-      const browser = await puppeteer.launch({
-        executablePath: getChromePath(),
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--window-size=1920,1080'
-        ],
-        defaultViewport: null,
-        timeout: 30000
-      });
+      const browser = await puppeteer.launch(launchConfigs[i]);
       
       console.log(`✅ Successfully launched browser with config ${i + 1}`);
       
@@ -683,30 +671,6 @@ async function createBrowser() {
   }
 }
 
-function getChromePath() {
-  // Hardcode Snap path first (works on EC2)
-  const possiblePaths = [
-    '/snap/bin/chromium',             // Snap Chromium (Ubuntu EC2)
-    '/usr/bin/chromium-browser',      // Older Ubuntu/Debian
-    '/usr/bin/chromium',              // Alternative
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/google-chrome'
-  ];
-
-  for (const path of possiblePaths) {
-    try {
-      if (fs.existsSync(path)) {
-        console.log(`✅ Found Chrome at: ${path}`);
-        return path;
-      }
-    } catch (err) {
-      continue;
-    }
-  }
-
-  console.warn('⚠️ Chrome not found in common locations');
-  return null;
-}
 
 
 
