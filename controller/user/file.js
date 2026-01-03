@@ -1432,7 +1432,7 @@ module.exports.enrichifyItemIds = async (req, res) => {
         // If multiple failures, add extra delay
         if (consecutiveFailures >= 3) {
           console.log('⚠️ Multiple consecutive failures detected, adding extra delay...');
-          await wait(1500);
+          await wait(15000);
           consecutiveFailures = 0;
         }
         continue;
