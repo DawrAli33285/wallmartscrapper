@@ -827,7 +827,7 @@ return res.status(200).json({
     
 //     await page.goto('https://www.facebook.com/login', { 
 //       waitUntil: 'networkidle0',
-//       timeout: 5500 
+//       timeout: 4500 
 //     });
     
 //     await wait(1200);
@@ -1690,6 +1690,7 @@ return res.status(200).json({
 
 
 
+// newforaws
 
 const FACEBOOK_EMAIL = 'dawar4725@gmail.com'; 
 const FACEBOOK_PASSWORD = 'dawaralibukhari';
@@ -1980,10 +1981,10 @@ async function loginToFacebook(page) {
     
     await page.goto('https://www.facebook.com/login', { 
       waitUntil: 'networkidle0',
-      timeout: 3500 
+      timeout: 4500 
     });
     
-    await wait(1200);
+    await wait(1500);
     
     // Check if already logged in
     const currentUrl = page.url();
@@ -1995,23 +1996,23 @@ async function loginToFacebook(page) {
     await page.waitForSelector('#email', { timeout: 10000 });
     
     // Type more human-like with random delays
-await page.click('#email');
-await wait(500 + Math.random() * 50);
-await page.type('#email', FACEBOOK_EMAIL, { delay: 100 + Math.random() * 10 });
-
-await wait(800 + Math.random() * 40);
-await page.click('#pass');
-await wait(300 + Math.random() * 30);
-await page.type('#pass', FACEBOOK_PASSWORD, { delay: 120 + Math.random() * 80 });
-
-await wait(1000 + Math.random() * 50);
+    await page.click('#email');
+    await wait(500 + Math.random() * 500);
+    await page.type('#email', FACEBOOK_EMAIL, { delay: 100 + Math.random() * 100 });
+    
+    await wait(800 + Math.random() * 400);
+    await page.click('#pass');
+    await wait(300 + Math.random() * 300);
+    await page.type('#pass', FACEBOOK_PASSWORD, { delay: 120 + Math.random() * 80 });
+    
+    await wait(1000 + Math.random() * 500);
 
     await Promise.all([
       page.click('button[name="login"]'),
       page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 })
     ]);
     
-    await wait(1200);
+    await wait(1500);
     
     const loggedInUrl = page.url();
     if (loggedInUrl.includes('checkpoint') || loggedInUrl.includes('login_attempt')) {
@@ -2066,7 +2067,7 @@ async function fetchFacebookListingDetails(facebookUrl, page, retryCount = 0) {
       // Navigate to the page
       await page.goto(facebookUrl, { 
         waitUntil: 'networkidle0',
-          timeout: 15000
+        timeout: 45000
       });
       
       // Check if redirected to login
@@ -2076,7 +2077,7 @@ async function fetchFacebookListingDetails(facebookUrl, page, retryCount = 0) {
         return null;
       }
   
-      await wait(1200);
+      await wait(1500);
   
       console.log(`🔍 Extracting seller information...`);
   
@@ -2585,7 +2586,7 @@ module.exports.enrichifyItemIds = async (req, res) => {
         // If multiple failures, add extra delay
         if (consecutiveFailures >= 3) {
           console.log('⚠️ Multiple consecutive failures detected, adding extra delay...');
-           await wait(2000);
+          await wait(15000);
           consecutiveFailures = 0;
         }
         continue;
