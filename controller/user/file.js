@@ -591,15 +591,38 @@ async function checkSystemRequirements() {
 }
 
 function getChromePath() {
-  const possiblePaths = [
-    '/snap/bin/chromium',            // Snap Chromium (what you have installed)
-    '/usr/bin/google-chrome',        
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium'
-  ];
+  const isWindows = process.platform === 'win32';
+  
+  let possiblePaths = [];
+  
+  if (isWindows) {
+    // Windows paths
+    possiblePaths = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${process.env['PROGRAMFILES(X86)']}\\Google\\Chrome\\Application\\chrome.exe`,
+      'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe',
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
+    ];
+  } else {
+    // Linux/Mac paths
+    possiblePaths = [
+      process.env.PUPPETEER_EXECUTABLE_PATH,
+      '/usr/bin/chromium-browser',
+      '/snap/bin/chromium',
+      '/usr/bin/google-chrome',        
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    ];
+  }
 
   for (const path of possiblePaths) {
+    if (!path) continue; // Skip undefined env vars
+    
     try {
       if (fs.existsSync(path)) {
         console.log(`✅ Found Chrome at: ${path}`);
@@ -611,95 +634,78 @@ function getChromePath() {
   }
 
   console.warn('⚠️ Chrome not found in common locations');
+  console.warn('💡 Install Chrome from: https://www.google.com/chrome/');
   return null;
 }
 
 
 
 async function createBrowser() {
-  const puppeteer = require('puppeteer');
+  const puppeteer = require('puppeteer-extra');
+  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+  
+  // Add stealth plugin to avoid detection
+  puppeteer.use(StealthPlugin());
 
   await checkSystemRequirements();
-  
-  
-  // Check for Chrome/Chromium installation
   const chromePath = getChromePath();
+  
+  // If no Chrome found, try without executablePath (Puppeteer will download Chromium)
   if (!chromePath) {
-    throw new Error('Chrome/Chromium not found. Please install: sudo apt-get install -y chromium-browser');
+    console.log('⚠️ Chrome not found, using Puppeteer bundled Chromium...');
+    console.log('💡 This will download Chromium automatically on first run');
   }
 
-  const launchConfigs = [
-    // Config 1: Headless with minimal args
-    {
-      executablePath: chromePath,
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--window-size=1920,1080'
-      ],
-      defaultViewport: null,
-      timeout: 30000
-    },
-    // Config 2: Visible browser
-    
-      {
-        executablePath: chromePath,
-        headless: false,
-        args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--window-size=1920,1080',
-        '--start-maximized'
-      ],
-      defaultViewport: null,
-      timeout: 30000
-    },
-    // Config 3: Even simpler
-    {
-      executablePath: chromePath,
-      headless: false,
-      args: ['--no-sandbox'],
-      defaultViewport: null,
-      timeout: 30000
-    },
-    // Config 4: Try with explicit Chrome path (Windows)
-    {
-      headless: false,
-      executablePath: getChromePath(),
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      defaultViewport: null,
-      timeout: 30000
-    }
-  ];
+  // Single optimized config - headless for maximum speed
+// Stealth mode config to avoid Facebook detection
+const config = {
+  headless: 'new',
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-blink-features=AutomationControlled',
+    '--disable-features=IsolateOrigins,site-per-process',
+    '--window-size=1920,1080',
+    '--start-maximized',
+    '--disable-web-security',
+    '--disable-features=VizDisplayCompositor'
+  ],
+  defaultViewport: { width: 1920, height: 1080 },
+  ignoreDefaultArgs: ['--enable-automation'],
+  timeout: 30000
+};
+  // Only add executablePath if Chrome was found
+  if (chromePath) {
+    config.executablePath = chromePath;
+  }
 
-  for (let i = 0; i < launchConfigs.length; i++) {
-    try {
-      console.log(`🚀 Trying browser configuration ${i + 1}...`);
-      const browser = await puppeteer.launch(launchConfigs[i]);
-      
-      
-      console.log(`✅ Successfully launched browser with config ${i + 1}`);
-      
-      // Set up browser event listeners
-      browser.on('disconnected', () => {
-        console.log('⚠️ Browser disconnected');
-      });
-      
-      browser.on('targetcreated', (target) => {
-        console.log(`🎯 Target created: ${target.url()}`);
-      });
-      
-      return browser;
-    } catch (error) {
-      console.error(`❌ Config ${i + 1} failed: ${error.message}`);
-      if (i === launchConfigs.length - 1) {
-        throw new Error(`All browser configurations failed: ${error.message}`);
-      }
-      await wait(3000);
+  try {
+    console.log('🚀 Launching browser in optimized headless mode...');
+    const browser = await puppeteer.launch(config);
+    console.log('✅ Browser launched successfully');
+    
+    browser.on('disconnected', () => {
+      console.log('⚠️ Browser disconnected');
+    });
+    
+    return browser;
+  } catch (error) {
+    console.error('❌ Browser launch failed:', error.message);
+    
+    // Provide helpful error message based on platform
+    if (process.platform === 'win32') {
+      console.error('\n💡 SOLUTION FOR WINDOWS:');
+      console.error('1. Install Google Chrome from: https://www.google.com/chrome/');
+      console.error('2. Or install Puppeteer with Chromium: npm install puppeteer');
+      console.error('3. If you have Chrome installed, set environment variable:');
+      console.error('   set PUPPETEER_EXECUTABLE_PATH=C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
+    } else {
+      console.error('\n💡 SOLUTION FOR LINUX:');
+      console.error('Run: sudo apt-get install -y chromium-browser');
     }
+    
+    throw error;
   }
 }
 
@@ -833,7 +839,7 @@ async function loginToFacebook(page) {
       return true;
     }
     
-    await page.waitForSelector('#email', { timeout: 30000 });
+    await page.waitForSelector('#email', { timeout: 40000 });
     
     // Type more human-like with random delays
     await page.click('#email');
