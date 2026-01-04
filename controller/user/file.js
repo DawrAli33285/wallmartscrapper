@@ -813,7 +813,7 @@ async function loginToFacebook(page) {
     
     await page.goto('https://www.facebook.com/login', { 
       waitUntil: 'networkidle0',
-      timeout: 2500 
+      timeout: 4500 
     });
     
     await wait(1500);
@@ -825,7 +825,7 @@ async function loginToFacebook(page) {
       return true;
     }
     
-    await page.waitForSelector('#email', { timeout: 55000 });
+    await page.waitForSelector('#email', { timeout: 10000 });
     
     // Type more human-like with random delays
     await page.click('#email');
@@ -841,7 +841,7 @@ async function loginToFacebook(page) {
 
     await Promise.all([
       page.click('button[name="login"]'),
-      page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 10000 })
+      page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 })
     ]);
     
     await wait(1500);
